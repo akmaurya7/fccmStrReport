@@ -13,6 +13,8 @@ import {
 import { validators, validateAll, scrollFirstError, applyValidation, clearValidation } from "./validation.js";
 import { showToast, openModal, setLoader, updateProgress, renderReview, setValidationSummary, buildSectionNav } from "./ui.js";
 
+const API_BASE_URL = "http://localhost:8081/api";
+
 const state = {
   seq: 1,
   transactions: [],
@@ -23,6 +25,134 @@ const state = {
 
 const uid = (prefix) => `${prefix}${state.seq++}`;
 const byId = (id) => document.getElementById(id);
+const textOf = (id) => byId(id)?.value?.trim() || "";
+
+const downloadXml = (xmlText, fileName) => {
+  const blob = new Blob([xmlText], { type: "application/xml;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+};
+
+const submitReportAndDownloadXml = async () => {
+  const catRes = await fetch(`${API_BASE_URL}/lookups/suspicion-categories`);
+  if (!catRes.ok) throw new Error("Failed to load suspicion categories");
+  const categories = await catRes.json();
+  const catCode = categories.find((x) => x.name === textOf("suspicionType"))?.code;
+  if (!catCode) throw new Error("Suspicion category mapping not found");
+
+  const payload = {
+    report: {
+      reportingEntityId: textOf("entityId"),
+      reportType: textOf("reportType"),
+      reportIdentifier: textOf("reportIdentifier") || null,
+      submitDate: textOf("submitDate") || null,
+      transactionStatus: textOf("transactionStatus"),
+      reportPreparationDate: textOf("prepDate"),
+      reportTransmissionDate: textOf("transmissionDate"),
+      suspicionCategoryCode: catCode,
+      suspicionDescription: textOf("suspicionDescription")
+    },
+    transactions: state.transactions.map(({ id }) => ({
+      transactionDate: textOf(`txDate_${id}`),
+      amount: textOf(`txAmount_${id}`),
+      currencyCode: textOf(`txCurrency_${id}`),
+      transactionType: textOf(`txType_${id}`),
+      country: textOf(`txProvince_${id}`),
+      branch: textOf(`txBranch_${id}`)
+    })),
+    participants: state.participants.map(({ id, type }) => ({
+      participantType: textOf(`participantType_${id}`) || type,
+      participantRole: textOf(`participantRole_${id}`),
+      idType: textOf(`idType_${id}`),
+      passportCountry: textOf(`passportCountry_${id}`),
+      idNumber: textOf(`idNumber_${id}`),
+      firstName: textOf(`firstName_${id}`),
+      middleName: textOf(`middleName_${id}`),
+      lastName: textOf(`lastName_${id}`),
+      dob: textOf(`dob_${id}`),
+      fatherFirstName: textOf(`fatherFirst_${id}`),
+      fatherLastName: textOf(`fatherLast_${id}`),
+      tin: textOf(`tin_${id}`),
+      legalName: textOf(`legalName_${id}`),
+      houseNumber: textOf(`house_${id}`) || textOf(`legalHouse_${id}`),
+      streetName: textOf(`street_${id}`) || textOf(`legalStreet_${id}`),
+      districtName: textOf(`district_${id}`) || textOf(`legalDistrict_${id}`),
+      locationName: textOf(`location_${id}`) || textOf(`legalLocation_${id}`),
+      cityName: textOf(`city_${id}`) || textOf(`legalCity_${id}`),
+      homePhone: textOf(`homePhone_${id}`) || textOf(`legalHomePhone_${id}`),
+      businessPhone: textOf(`businessPhone_${id}`) || textOf(`legalBusinessPhone_${id}`),
+      mobilePhone: textOf(`mobilePhone_${id}`) || textOf(`legalMobilePhone_${id}`)
+    })),
+    accounts: state.accounts.map((a) => ({
+      accountNumber: textOf(`acctNo_${a.id}`),
+      accountType: textOf(`acctType_${a.id}`),
+      bankName: textOf(`bankName_${a.id}`),
+      bankAddress: textOf(`bankAddress_${a.id}`),
+      owners: a.owners.map((o) => ({
+        ownerType: textOf(`ownerType_${o.id}`) || o.type,
+        idType: textOf(`ownerIdType_${o.id}`),
+        passportCountry: textOf(`ownerPassportCountry_${o.id}`),
+        idNumber: textOf(`ownerIdNumber_${o.id}`),
+        firstName: textOf(`ownerFirstName_${o.id}`),
+        middleName: textOf(`ownerMiddleName_${o.id}`),
+        lastName: textOf(`ownerLastName_${o.id}`),
+        dob: textOf(`ownerDob_${o.id}`),
+        fatherFirstName: textOf(`ownerFatherFirst_${o.id}`),
+        fatherLastName: textOf(`ownerFatherLast_${o.id}`),
+        tin: textOf(`ownerTin_${o.id}`),
+        legalName: textOf(`ownerLegalName_${o.id}`),
+        houseNumber: textOf(`ownerHouse_${o.id}`) || textOf(`ownerLegalHouse_${o.id}`),
+        streetName: textOf(`ownerStreet_${o.id}`) || textOf(`ownerLegalStreet_${o.id}`),
+        districtName: textOf(`ownerDistrict_${o.id}`) || textOf(`ownerLegalDistrict_${o.id}`),
+        locationName: textOf(`ownerLocation_${o.id}`) || textOf(`ownerLegalLocation_${o.id}`),
+        cityName: textOf(`ownerCity_${o.id}`) || textOf(`ownerLegalCity_${o.id}`),
+        homePhone: textOf(`ownerHomePhone_${o.id}`) || textOf(`ownerLegalHomePhone_${o.id}`),
+        businessPhone: textOf(`ownerBusinessPhone_${o.id}`) || textOf(`ownerLegalBusinessPhone_${o.id}`),
+        mobilePhone: textOf(`ownerMobilePhone_${o.id}`) || textOf(`ownerLegalMobilePhone_${o.id}`)
+      }))
+    })),
+    documents: await Promise.all(state.documents.map(async ({ id }) => {
+      const file = byId(`docFile_${id}`)?.files?.[0];
+      return {
+        name: textOf(`docName_${id}`),
+        type: textOf(`docType_${id}`),
+        identifier: textOf(`docIdentifier_${id}`),
+        date: textOf(`docDate_${id}`),
+        preparer: textOf(`docPreparer_${id}`),
+        fileName: file?.name || "",
+        fileContentBase64: await toBase64(file)
+      };
+    }))
+  };
+
+  const response = await fetch(`${API_BASE_URL}/reports/submit-xml`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(body || "Backend save failed");
+  }
+  const blob = await response.blob();
+  const contentDisposition = response.headers.get("content-disposition") || "";
+  const fileNameMatch = contentDisposition.match(/filename=\"?([^\";]+)\"?/i);
+  const fileName = fileNameMatch ? fileNameMatch[1] : `STR_${textOf("entityId") || "report"}.xml`;
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+};
 
 const mountStatic = () => {
   buildSectionNav(SECTION_TITLES);
@@ -407,18 +537,28 @@ const bindEvents = () => {
       title: "Confirm Submission",
       message: "Submit this STR to the compliance system?",
       confirmText: "Submit",
-      onConfirm: () => {
+      onConfirm: async () => {
         setLoader(true);
-        setTimeout(() => {
+        try {
+          await submitReportAndDownloadXml();
           setLoader(false);
           openModal({
             title: "Submission Successful",
-            message: "STR has passed frontend checks and is ready for Spring Boot API submission.",
+            message: "STR submitted successfully and XML downloaded from backend.",
             onConfirm: () => showToast("Report submitted successfully.", "success"),
             confirmText: "Close",
             isSuccess: true
           });
-        }, 900);
+        } catch (error) {
+          setLoader(false);
+          openModal({
+            title: "Submission Failed",
+            message: `Backend save/XML generation failed: ${error.message}`,
+            onConfirm: () => showToast("Submission failed.", "error"),
+            confirmText: "Close",
+            isSuccess: false
+          });
+        }
       }
     });
   });
@@ -442,7 +582,15 @@ init();
 
 
 
-
-
-
+  const toBase64 = (file) => new Promise((resolve, reject) => {
+    if (!file) return resolve("");
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = String(reader.result || "");
+      const base64 = result.includes(",") ? result.split(",")[1] : result;
+      resolve(base64);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
 
