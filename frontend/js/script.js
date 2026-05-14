@@ -143,7 +143,7 @@ const submitReportAndDownloadXml = async () => {
   const blob = await response.blob();
   const contentDisposition = response.headers.get("content-disposition") || "";
   const fileNameMatch = contentDisposition.match(/filename=\"?([^\";]+)\"?/i);
-  const fileName = fileNameMatch ? fileNameMatch[1] : `STR_${textOf("entityId") || "report"}.xml`;
+  const fileName = fileNameMatch ? fileNameMatch[1] : `STR_${textOf("entityId") || "report"}.xml.pgp`;
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
@@ -593,4 +593,3 @@ init();
     reader.onerror = reject;
     reader.readAsDataURL(file);
   });
-
